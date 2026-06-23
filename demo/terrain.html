@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Raymarched terrain — live demo</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0e15;overflow:hidden;font-family:Helvetica,Arial,sans-serif;}
+  #gl{display:block;width:100vw;height:100vh;cursor:crosshair;}
+  .ui{position:fixed;left:22px;top:20px;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7);pointer-events:none;}
+  .ui .k{font:700 12px/1 ui-monospace,monospace;letter-spacing:.18em;color:#e6885f;}
+  .ui h1{font-size:26px;font-weight:800;margin:6px 0 4px;}
+  .ui p{font:13px/1.5 ui-monospace,monospace;color:#cdd6e6;margin:0;opacity:.9;}
+  .bar{position:fixed;right:18px;top:18px;display:flex;gap:10px;}
+  .bar a,.bar button{pointer-events:auto;cursor:pointer;font:600 13px/1 ui-monospace,monospace;
+    color:#fff;background:rgba(20,24,34,.6);border:1px solid #2a2d39;border-radius:999px;
+    padding:9px 14px;text-decoration:none;backdrop-filter:blur(6px);}
+  .bar a:hover,.bar button:hover{background:#e6885f;border-color:#e6885f;}
+  #err{position:fixed;left:22px;bottom:18px;color:#e6885f;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap;max-width:80vw;}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="ui">
+  <div class="k">SHADER · TERRAIN &amp; LANDSCAPES</div>
+  <h1>One fragment shader, a whole world</h1>
+  <p>move the mouse to look around · it flies itself</p>
+</div>
+<div class="bar">
+  <a href="../index.html">↩ Learning path</a>
+  <button id="fs">⤢ Fullscreen</button>
+</div>
+<div id="err"></div>
+
+<script id="frag" type="x-shader/frag">
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y); }
+const mat2 m2=mat2(0.8,-0.6,0.6,0.8);
+float fbm2(vec2 p){ float h=0.0,a=0.5; for(int i=0;i<5;i++){ h+=a*noise(p); p=m2*p*2.0; a*=0.5; } return h; }
+float terrainAt(vec2 p, float dist){
+  float oct=clamp(5.0 - dist*0.05, 1.5, 5.0);
+  vec2 q=p*0.13; float h=0.0,a=0.5;
+  for(int i=0;i<5;i++){ float w=clamp(oct-float(i),0.0,1.0); h+=a*w*noise(q); q=m2*q*2.0; a*=0.5; }
+  return 7.0*h;
+}
+float castRay(vec3 ro, vec3 rd){ float t=0.5,dt,lastD=ro.y-terrainAt(ro.xz,0.0);
+  for(int i=0;i<260;i++){ vec3 p=ro+rd*t; float d=p.y-terrainAt(p.xz,t);
+    if(d<0.0) return t-dt+dt*lastD/(lastD-d); lastD=d; dt=0.011*t+0.06; t+=dt; if(t>220.0) break; } return -1.0; }
+vec3 calcNormal(vec3 p, float t){ float e=0.004*t+0.03;
+  return normalize(vec3(terrainAt(p.xz-vec2(e,0.0),t)-terrainAt(p.xz+vec2(e,0.0),t), 2.0*e,
+                        terrainAt(p.xz-vec2(0.0,e),t)-terrainAt(p.xz+vec2(0.0,e),t))); }
+float shadow(vec3 p, vec3 sun, float dist){ float res=1.0,t=0.8;
+  for(int i=0;i<20;i++){ vec3 q=p+sun*t; float h=q.y-terrainAt(q.xz,dist);
+    res=min(res,9.0*h/t); if(h<0.0) return 0.0; t+=clamp(h,0.8,8.0); if(t>50.0) break; } return clamp(res,0.0,1.0); }
+vec3 skyAndClouds(vec3 ro, vec3 rd, vec3 sun){
+  vec3 col=mix(vec3(0.32,0.55,0.9), vec3(0.06,0.18,0.45), clamp(rd.y*1.3,0.0,1.0));
+  float sd=clamp(dot(rd,sun),0.0,1.0);
+  col=mix(col, vec3(0.95,0.78,0.6), pow(sd,5.0)*0.5*clamp(1.0-rd.y*2.5,0.0,1.0));
+  col+=vec3(1.0,0.85,0.6)*pow(sd,250.0);
+  if(rd.y>0.005){
+    float tp=(26.0-ro.y)/rd.y;
+    vec2 cp=(ro+rd*tp).xz*0.013 + vec2(iTime*0.025,0.0);
+    float cl=smoothstep(0.34,0.62,fbm2(cp*1.3));
+    float li=smoothstep(0.34,0.62,fbm2((cp+sun.xz*0.10)*1.3));
+    vec3 cc=mix(vec3(0.62,0.66,0.78), vec3(1.0,0.99,0.96), clamp((cl-li)*3.0+0.75,0.0,1.0));
+    col=mix(col, cc, cl*smoothstep(0.0,0.12,rd.y)*0.95);
+  }
+  return col;
+}
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  vec2 uv=(fragCoord-0.5*iResolution.xy)/iResolution.y;
+  vec3 sun=normalize(vec3(-0.82,0.26,0.5));
+  float yaw=(uMouseX-0.5)*1.8;
+  float pitch=-(uMouseY-0.5)*0.6 - 0.16;
+  vec3 ro=vec3(0.0, 11.0, iTime*2.6);
+  vec3 ww=normalize(vec3(sin(yaw), pitch, cos(yaw)));
+  vec3 uu=normalize(cross(ww,vec3(0,1,0))), vv=cross(uu,ww);
+  vec3 rd=normalize(uu*uv.x+vv*uv.y+ww*1.4);
+  vec3 col; float t=castRay(ro,rd);
+  if(t<0.0){ col=skyAndClouds(ro,rd,sun); }
+  else{
+    vec3 p=ro+rd*t; vec3 n=calcNormal(p,t);
+    float slope=n.y, h01=clamp(terrainAt(p.xz,t)/7.0,0.0,1.0);
+    vec3 grass=vec3(0.16,0.30,0.08), rock=vec3(0.28,0.22,0.17), snow=vec3(0.95,0.96,1.0);
+    vec3 mat=mix(rock,grass,smoothstep(0.55,0.82,slope));
+    mat=mix(mat,snow,smoothstep(0.6,0.8,h01)*smoothstep(0.5,0.78,slope));
+    float dif=clamp(dot(n,sun),0.0,1.0), sh=shadow(p+n*0.3,sun,t), sky=clamp(0.5+0.5*n.y,0.0,1.0);
+    col=mat*(vec3(1.4,1.15,0.8)*dif*sh + vec3(0.12,0.22,0.40)*sky);
+    vec3 fogCol=mix(vec3(0.5,0.62,0.8), vec3(0.95,0.72,0.5), pow(clamp(dot(rd,sun),0.0,1.0),5.0));
+    fogCol=mix(fogCol, skyAndClouds(ro,rd,sun), 0.6);
+    col=mix(col, fogCol, 1.0-exp(-0.00055*t*t));
+  }
+  vec2 q=fragCoord/iResolution.xy;
+  col*=0.5+0.5*pow(16.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.12);
+  col=pow(col, vec3(0.4545));
+  fragColor=vec4(col,1.0);
+}
+</script>
+
+<script>
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', {antialias:false});
+const err = document.getElementById('err');
+const VERT = `#version 300 es
+in vec2 aPos; void main(){ gl_Position=vec4(aPos,0.0,1.0); }`;
+const PRE = `#version 300 es
+precision highp float;
+uniform vec3 iResolution; uniform float iTime; uniform float uMouseX; uniform float uMouseY;
+out vec4 _fragColor;
+`;
+const POST = `\nvoid main(){ mainImage(_fragColor, gl_FragCoord.xy); }`;
+
+function compile(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) err.textContent='shader error:\n'+gl.getShaderInfoLog(s); return s; }
+
+const frag = PRE + document.getElementById('frag').textContent + POST;
+const p = gl.createProgram();
+gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(p, compile(gl.FRAGMENT_SHADER, frag));
+gl.bindAttribLocation(p,0,'aPos'); gl.linkProgram(p);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+gl.useProgram(p); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+const L = {res:gl.getUniformLocation(p,'iResolution'), time:gl.getUniformLocation(p,'iTime'),
+           mx:gl.getUniformLocation(p,'uMouseX'), my:gl.getUniformLocation(p,'uMouseY')};
+
+// mouse (smoothed) — works on hover, no click needed
+let tmx=0.5, tmy=0.42, mx=0.5, my=0.42;
+addEventListener('pointermove', e=>{ tmx=e.clientX/innerWidth; tmy=e.clientY/innerHeight; });
+
+function resize(){ const dpr=Math.min(devicePixelRatio||1,2);
+  canvas.width=Math.floor(innerWidth*dpr); canvas.height=Math.floor(innerHeight*dpr); }
+resize(); addEventListener('resize', resize);
+
+document.getElementById('fs').onclick=()=>{
+  if(document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen();
+};
+
+const t0=performance.now();
+function frame(){
+  mx += (tmx-mx)*0.06; my += (tmy-my)*0.06;          // smooth the look
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.uniform3f(L.res, canvas.width, canvas.height, 1);
+  gl.uniform1f(L.time, (performance.now()-t0)/1000);
+  gl.uniform1f(L.mx, mx); gl.uniform1f(L.my, my);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
