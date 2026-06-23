@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A3 — Painting the landscape</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<style>
+  .ship { margin: 1rem 0 2.5rem; padding: 0.9rem 1.1rem; border-radius: 6px; background: var(--code-bg);
+    border-left: 3px solid var(--accent); font-size: 0.9rem; max-width: var(--measure); }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <p class="kicker">Advanced · Terrain &amp; Landscapes · A3</p>
+  <h1>Painting the landscape</h1>
+  <p class="standfirst">Form plus light gives you a grey landform. To make it read as a <em>place</em> you
+  paint it — grass on gentle ground, rock on the steeps, snow on the peaks — then add cast shadows,
+  warm sun against cool shade, and atmospheric fog. That contrast is what sells it.</p>
+</header>
+
+<main>
+
+<div class="goal">
+  <span class="label">Your win this lesson</span>
+  Drive material color from <strong>slope &amp; height</strong>, add a <strong>soft cast shadow</strong>
+  and warm/cool lighting, and fly through a high-contrast landscape you can paste into Shadertoy.
+</div>
+
+<h2>Material from slope &amp; height</h2>
+
+<p>Two numbers decide the material. The <strong>slope</strong> is <code>normal.y</code> (1 = flat,
+0 = vertical), the <strong>height</strong> is the normalized terrain value:</p>
+
+<pre><code>vec3 mat = mix(rock, grass, smoothstep(0.55, 0.82, slope));       // steep → rock, flat → grass
+mat = mix(mat, snow, smoothstep(snowLine, snowLine+0.2, h01)      // high...
+                     * smoothstep(0.5, 0.78, slope));              // ...and not a sheer cliff</code></pre>
+
+<h2>Contrast: shadow, warm vs cool, deep sky</h2>
+
+<p>A flat-lit landscape looks washed out. Three cheap moves fix that:</p>
+<ul>
+  <li><strong>Cast shadows</strong> — march a ray from each point toward the sun; if terrain blocks it,
+  darken. Big, dramatic shadows across the valleys.</li>
+  <li><strong>Warm sun, cool shade</strong> — light the lit side with a warm tint and fill the shadow
+  with cool sky-blue, not grey. The colour contrast reads as sunlight.</li>
+  <li><strong>A deeper sky + tighter fog</strong> — saturated blue overhead, and fog that only takes the
+  far distance, instead of a pale wash over everything.</li>
+</ul>
+
+<h2>Play — art-direct the vista</h2>
+
+<p><code>snow</code> moves the snow line, <code>fog</code> the haze, <code>sun</code> the light direction
+(watch the shadows swing). The camera flies forward.</p>
+
+<div id="lab-play"></div>
+
+<div class="ship">Shadertoy-ready code (slider values baked as consts):
+  <a href="https://www.shadertoy.com/new" target="_blank">open a new shader</a> and paste ↓</div>
+<pre><code id="code-terrain"></code></pre>
+
+<h2>Check yourself</h2>
+
+<div class="quiz" id="q1"
+  data-q="What makes snow land believably on the terrain?"
+  data-correct="0"
+  data-options='["It needs both high height and a gentle slope","It is placed only where the fog is thickest","It follows the sun direction across the ridges","It fills every pixel above the camera height"]'
+  data-feedback="Snow = smoothstep(height) * smoothstep(slope): high enough AND flat enough. Steep faces stay bare rock."></div>
+
+<div class="quiz" id="q2"
+  data-q="Why light the shadowed side with cool blue instead of grey?"
+  data-correct="1"
+  data-options='["Blue renders faster than grey on the GPU now","Warm sun vs cool shade reads as real sunlight","It hides the cast shadows that look like bugs","It increases the number of fBM octaves used"]'
+  data-feedback="Real outdoor shadow is filled by blue skylight. Warm key + cool fill gives colour contrast that sells the scene."></div>
+
+<div class="source">
+  <span class="label">Primary source</span>
+  <a href="https://www.youtube.com/watch?v=BFld4EBO2RE">IQ — "Painting a landscape with maths"</a> and his
+  Shadertoy <a href="https://www.shadertoy.com/view/MdX3Rr">"Elevated"</a>. See
+  <a href="https://github.com/franpiaggio/interactive-shader-course/blob/main/RESOURCES.md">RESOURCES.md</a>.
+</div>
+
+<div class="ask">
+  <span class="label">You built a landscape renderer. 🏔️</span>
+  Next: <strong><a href="a4-variants-and-moods.html">A4 — variants &amp; moods</a></strong> — the same
+  renderer turned into a sunset and a desert by changing a handful of numbers. Ask me about
+  erosion/ridged peaks, water, or clouds over the terrain too.
+</div>
+
+<nav class="lesson-nav">
+  <span>← <a href="a2-noise-terrain-and-light.html">A2</a></span>
+  <span><a href="index.html">Advanced index</a> · Next: <a href="a4-variants-and-moods.html">A4 — Variants &amp; moods</a> →</span>
+</nav>
+
+</main>
+
+<script type="module" src="../assets/quiz.js"></script>
+<script type="module">
+import { createShaderLab } from '../assets/shader-lab.js';
+
+const TERRAIN_BODY = `
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y); }
+const mat2 m2=mat2(0.8,-0.6,0.6,0.8);
+float fbm(vec2 p){ float h=0.0,a=0.5; for(int i=0;i<7;i++){ h+=a*noise(p); p=m2*p*2.0; a*=0.5; } return h; }
+float terrain(vec2 p){ return 7.0*fbm(p*0.13); }
+float castRay(vec3 ro, vec3 rd){
+  float t=0.5, dt, lastD=ro.y-terrain(ro.xz);
+  for(int i=0;i<240;i++){ vec3 p=ro+rd*t; float d=p.y-terrain(p.xz);
+    if(d<0.0) return t-dt+dt*lastD/(lastD-d);
+    lastD=d; dt=0.01*t+0.05; t+=dt; if(t>160.0) break; }
+  return -1.0;
+}
+vec3 calcNormal(vec3 p, float t){ float e=0.002*t;
+  return normalize(vec3(terrain(p.xz-vec2(e,0.0))-terrain(p.xz+vec2(e,0.0)), 2.0*e,
+                        terrain(p.xz-vec2(0.0,e))-terrain(p.xz+vec2(0.0,e)))); }
+float shadow(vec3 p, vec3 sun){            // soft cast shadow toward the sun
+  float res=1.0, t=0.6;
+  for(int i=0;i<24;i++){ vec3 q=p+sun*t; float h=q.y-terrain(q.xz);
+    res=min(res, 10.0*h/t); if(h<0.0) return 0.0; t+=clamp(h,0.4,6.0); if(t>50.0) break; }
+  return clamp(res,0.0,1.0);
+}
+vec3 skyCol(vec3 rd, vec3 sun){
+  vec3 col=mix(vec3(0.30,0.55,0.92), vec3(0.05,0.16,0.42), clamp(rd.y*1.4,0.0,1.0));
+  float sd=clamp(dot(rd,sun),0.0,1.0);
+  col=mix(col, vec3(0.95,0.75,0.55), pow(sd,5.0)*0.5*clamp(1.0-rd.y*2.5,0.0,1.0));
+  col+=vec3(1.0,0.85,0.6)*pow(sd,250.0);
+  return col;
+}
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  vec2 uv=(fragCoord-0.5*iResolution.xy)/iResolution.y;
+  vec3 sun=normalize(vec3(uSunX,0.38,0.6));
+  vec3 ro=vec3(0.0, 11.0, iTime*3.0);
+  vec3 ta=ro+vec3(0.0,-0.9,4.0);
+  vec3 ww=normalize(ta-ro), uu=normalize(cross(ww,vec3(0,1,0))), vv=cross(uu,ww);
+  vec3 rd=normalize(uu*uv.x+vv*uv.y+ww*1.4);
+  float t=castRay(ro,rd);
+  vec3 col;
+  if(t<0.0){ col=skyCol(rd,sun); }
+  else{
+    vec3 p=ro+rd*t; vec3 n=calcNormal(p,t);
+    float slope=n.y, h01=clamp(terrain(p.xz)/7.0,0.0,1.0);
+    vec3 grass=vec3(0.16,0.30,0.08), rock=vec3(0.28,0.22,0.17), snow=vec3(0.95,0.96,1.0);
+    vec3 mat=mix(rock,grass,smoothstep(0.55,0.82,slope));
+    mat=mix(mat,snow,smoothstep(uSnow,uSnow+0.2,h01)*smoothstep(0.5,0.78,slope));
+    float dif=clamp(dot(n,sun),0.0,1.0);
+    float sh=shadow(p+n*0.2, sun);
+    float sky=clamp(0.5+0.5*n.y,0.0,1.0);
+    vec3 lin = vec3(1.4,1.15,0.8)*dif*sh + vec3(0.12,0.22,0.40)*sky;   // warm sun, cool shade
+    col=mat*lin;
+    vec3 fogCol=mix(vec3(0.5,0.62,0.8), vec3(0.95,0.72,0.5), pow(clamp(dot(rd,sun),0.0,1.0),5.0));
+    col=mix(col, fogCol, 1.0-exp(-uFog*t*t));
+  }
+  vec2 q=fragCoord/iResolution.xy;
+  col*=0.5+0.5*pow(16.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.15);            // vignette
+  col=pow(col, vec3(0.4545));
+  fragColor=vec4(col,1.0);
+}`;
+
+createShaderLab(document.getElementById('lab-play'), {
+  height: 400,
+  uniforms: [
+    { name: 'uSnow', label: 'snow', min: 0.45, max: 0.95, value: 0.6 },
+    { name: 'uFog',  label: 'fog',  min: 0.0002, max: 0.0016, step: 0.0001, value: 0.00055 },
+    { name: 'uSunX', label: 'sun',  min: -1.0, max: 0.2, value: -0.7 },
+  ],
+  source: TERRAIN_BODY,
+});
+
+document.getElementById('code-terrain').textContent =
+  '// Raymarched landscape — paste into shadertoy.com/new. Tweak these:\n' +
+  'const float uSnow=0.6, uFog=0.00055, uSunX=-0.7;\n' + TERRAIN_BODY;
+</script>
+</body>
+</html>

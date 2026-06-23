@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A2 — Noise terrain &amp; light</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+
+<header class="masthead">
+  <p class="kicker">Advanced · Terrain &amp; Landscapes · A2</p>
+  <h1>Noise terrain &amp; light</h1>
+  <p class="standfirst">A1's terrain was already <code>fbm</code> noise — but flat-shaded, it reads as a
+  paper cutout. Give it a <em>normal</em> and a sun, and the same height map suddenly has form: ridges
+  catch light, valleys fall into shadow.</p>
+</header>
+
+<main>
+
+<div class="goal">
+  <span class="label">Your win this lesson</span>
+  Compute the terrain normal from the height map and light it with diffuse + sky ambient — turning the
+  silhouette into a 3-D landform.
+</div>
+
+<h2>Normals from a height map</h2>
+
+<p>You don't need the SDF tetrahedron trick here. The surface is <code>y = h(x,z)</code>, so the normal
+comes straight from how the height changes in x and z (finite differences):</p>
+
+<pre><code>vec3 calcNormal(vec3 p, float t) {
+    float e = 0.002 * t;            // scale the sample gap with distance (anti-alias)
+    return normalize(vec3(
+        terrain(p.xz - vec2(e,0)) - terrain(p.xz + vec2(e,0)),
+        2.0 * e,                     // the "up" component
+        terrain(p.xz - vec2(0,e)) - terrain(p.xz + vec2(0,e))));
+}</code></pre>
+
+<p>Steep slopes → big height differences → normal tilts away from up; flat ground → normal points up.
+Then it's the same <a href="https://franpiaggio.github.io/interactive-shader-course/lessons/0007-normals-light-and-shadows.html">Lambert lighting</a> as the
+core course: <code>diffuse = max(dot(n, sunDir), 0.0)</code>, plus a sky-blue ambient so shadowed slopes
+aren't black.</p>
+
+<h2>Play — move the sun</h2>
+
+<p>Single-material terrain, fully lit. Drag <code>sun x / y</code> to move the light and watch ridges and
+valleys appear — that's the normal doing its job. The camera flies forward.</p>
+
+<div id="lab-play"></div>
+
+<h2>Now you — light it, graded live</h2>
+
+<p>The terrain is painted a flat green — no form. Compute the normal and apply diffuse + ambient.
+<strong>Check</strong> verifies the surface now varies (lit ridges vs shaded slopes) instead of being uniform.</p>
+
+<div id="lab-build"></div>
+
+<div class="pitfall">
+  <span class="label">Watch for</span>
+  The sample gap <code>e</code> must scale with distance (<code>0.002*t</code>). A fixed tiny <code>e</code>
+  makes far normals noisy (aliasing); too large smears the detail. And keep some ambient — pure diffuse
+  makes shadowed slopes read as holes.
+</div>
+
+<h2>Check yourself</h2>
+
+<div class="quiz" id="q1"
+  data-q="How is a heightfield normal computed?"
+  data-correct="0"
+  data-options='["From the height differences in x and z directions","From four tetrahedron taps of a distance field","By averaging the normals of nearby triangles","From the ray direction reflected off the ground"]'
+  data-feedback="The surface is y = h(x,z); its slope in x and z gives the normal directly via finite differences."></div>
+
+<div class="quiz" id="q2"
+  data-q="Why scale the finite-difference gap e with distance t?"
+  data-correct="1"
+  data-options='["To make the sun appear to move across the sky","To avoid noisy, aliased normals on far terrain","To convert the height map into a distance field","To increase the number of fBM octaves used"]'
+  data-feedback="Far terrain maps to sub-pixel features; a distance-scaled gap samples at the right scale and keeps normals smooth."></div>
+
+<div class="source">
+  <span class="label">Primary source — read this next</span>
+  <a href="https://iquilezles.org/articles/fbm/">IQ — fBM</a> for the height function, and
+  <a href="https://iquilezles.org/articles/outdoorslighting/">IQ — Outdoor lighting</a> for the sun +
+  sky-ambient model. See <a href="https://github.com/franpiaggio/interactive-shader-course/blob/main/RESOURCES.md">RESOURCES.md</a>.
+</div>
+
+<div class="ask">
+  <span class="label">Stuck or curious?</span> Ask me — e.g. <em>"how do I add a second 'bounce' light?"</em>
+  or <em>"why is my far terrain sparkly?"</em> When it's ✓, next is <strong>A3 — painting the landscape</strong>
+  (materials, fog, the full vista).
+</div>
+
+<nav class="lesson-nav">
+  <span>← <a href="a1-heightfield-raymarching.html">A1</a></span>
+  <span><a href="index.html">Advanced index</a> · Next: <a href="a3-painting-the-landscape.html">A3 — Painting the landscape</a> →</span>
+</nav>
+
+</main>
+
+<script type="module" src="../assets/quiz.js"></script>
+<script type="module">
+import { createShaderLab } from '../assets/shader-lab.js';
+
+const HELP = `
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y); }
+const mat2 m2=mat2(0.8,-0.6,0.6,0.8);
+float fbm(vec2 p){ float h=0.0,a=0.5; for(int i=0;i<7;i++){ h+=a*noise(p); p=m2*p*2.0; a*=0.5; } return h; }
+float terrain(vec2 p){ return uHeight*fbm(p*0.13); }
+float castRay(vec3 ro, vec3 rd){
+  float t=0.5, dt, lastD=ro.y-terrain(ro.xz);
+  for(int i=0;i<200;i++){ vec3 p=ro+rd*t; float d=p.y-terrain(p.xz);
+    if(d<0.0) return t-dt+dt*lastD/(lastD-d);
+    lastD=d; dt=0.01*t+0.05; t+=dt; if(t>140.0) break; }
+  return -1.0;
+}
+vec3 calcNormal(vec3 p, float t){ float e=0.002*t;
+  return normalize(vec3(terrain(p.xz-vec2(e,0.0))-terrain(p.xz+vec2(e,0.0)), 2.0*e,
+                        terrain(p.xz-vec2(0.0,e))-terrain(p.xz+vec2(0.0,e)))); }
+vec3 sky(vec3 rd, vec3 sun){ vec3 c=mix(vec3(0.30,0.55,0.92), vec3(0.05,0.16,0.42), clamp(rd.y*1.4,0.0,1.0));
+  c+=vec3(1.0,0.85,0.6)*pow(clamp(dot(rd,sun),0.0,1.0),120.0); return c; }
+vec3 cam(vec2 uv, vec3 ro, vec3 ta){ vec3 ww=normalize(ta-ro),uu=normalize(cross(ww,vec3(0,1,0))),vv=cross(uu,ww);
+  return normalize(uu*uv.x+vv*uv.y+ww*1.4); }`;
+
+createShaderLab(document.getElementById('lab-play'), {
+  height: 360,
+  uniforms: [
+    { name: 'uHeight', label: 'height', min: 2.0, max: 12.0, value: 7.0 },
+    { name: 'uSunX', label: 'sun x', min: -1.0, max: 1.0, value: -0.6 },
+    { name: 'uSunY', label: 'sun y', min: 0.15, max: 1.0, value: 0.45 },
+  ],
+  source: HELP + `
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  vec2 uv=(fragCoord-0.5*iResolution.xy)/iResolution.y;
+  vec3 sun=normalize(vec3(uSunX,uSunY,0.7));
+  vec3 ro=vec3(0.0, uHeight+4.0, iTime*3.0);
+  vec3 rd=cam(uv, ro, ro+vec3(0.0,-0.9,4.0));
+  float t=castRay(ro,rd);
+  vec3 col;
+  if(t<0.0){ col=sky(rd,sun); }
+  else{
+    vec3 p=ro+rd*t; vec3 n=calcNormal(p,t);
+    float dif=clamp(dot(n,sun),0.0,1.0);
+    float amb=clamp(0.5+0.5*n.y,0.0,1.0);
+    vec3 mat=vec3(0.30,0.40,0.20);
+    col=mat*(vec3(1.15,1.0,0.8)*dif + vec3(0.30,0.45,0.62)*amb);
+    col=mix(col, sky(rd,sun), 1.0-exp(-0.0008*t*t));
+  }
+  col=pow(col,vec3(0.4545));
+  fragColor=vec4(col,1.0);
+}`,
+});
+
+createShaderLab(document.getElementById('lab-build'), {
+  editable: true, height: 360,
+  uniforms: [ { name: 'uHeight', label: 'height', min: 2.0, max: 12.0, value: 7.0 } ],
+  source: HELP + `
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  vec2 uv=(fragCoord-0.5*iResolution.xy)/iResolution.y;
+  vec3 sun=normalize(vec3(-0.6,0.45,0.7));
+  vec3 ro=vec3(0.0, uHeight+4.0, iTime*3.0);
+  vec3 rd=cam(uv, ro, ro+vec3(0.0,-0.9,4.0));
+  float t=castRay(ro,rd);
+  vec3 col;
+  if(t<0.0){ col=sky(rd,sun); }
+  else{
+    vec3 p=ro+rd*t;
+    vec3 mat=vec3(0.30,0.40,0.20);
+
+    // C1: light it. Compute the normal and apply diffuse + sky ambient:
+    //   vec3 n=calcNormal(p,t);
+    //   float dif=clamp(dot(n,sun),0.0,1.0);
+    //   float amb=clamp(0.5+0.5*n.y,0.0,1.0);
+    //   mat *= vec3(1.15,1.0,0.8)*dif + vec3(0.30,0.45,0.62)*amb;
+    col=mat;
+
+    col=mix(col, sky(rd,sun), 1.0-exp(-0.0008*t*t));
+  }
+  col=pow(col,vec3(0.4545));
+  fragColor=vec4(col,1.0);
+}`,
+  challenges: [
+    { text: '<b>Light it.</b> Compute <code>n = calcNormal(p,t)</code>, then ' +
+            '<code>dif = clamp(dot(n,sun),0.,1.)</code> and an ambient term, and multiply the material by them ' +
+            '(see the commented lines). Flat green should become lit ridges and shaded valleys.',
+      check: S => { // flat shading = ~uniform along a row; lighting = strong variation
+        let maxRange = 0;
+        for (const v of [0.18, 0.28]) {
+          const lum = [0.2,0.35,0.5,0.65,0.8].map(u => { const c = S.uv(u, v); return (c[0]+c[1]+c[2])/3; });
+          maxRange = Math.max(maxRange, Math.max(...lum) - Math.min(...lum));
+        }
+        return maxRange > 0.1; } },
+  ],
+});
+</script>
+</body>
+</html>

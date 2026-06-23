@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A4 — Variants &amp; moods</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<style>
+  .ship { margin: 1rem 0 2.5rem; padding: 0.9rem 1.1rem; border-radius: 6px; background: var(--code-bg);
+    border-left: 3px solid var(--accent); font-size: 0.9rem; max-width: var(--measure); }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <p class="kicker">Advanced · Terrain &amp; Landscapes · A4</p>
+  <h1>Variants &amp; moods</h1>
+  <p class="standfirst">One renderer, many worlds. The A3 landscape becomes a fiery sunset or a sun-baked
+  desert by changing a handful of numbers — the sun, the palette, the materials, the height. Here are two
+  worked examples and the knobs that make them.</p>
+</header>
+
+<main>
+
+<div class="goal">
+  <span class="label">Your win this lesson</span>
+  See how the <em>same</em> terrain code yields completely different places, and learn which few
+  parameters carry the mood — so you can invent your own.
+</div>
+
+<h2>The knobs that change everything</h2>
+
+<p>Nothing structural changes between these — same march, same fBM, same normals. What changes:</p>
+<ul>
+  <li><strong>Sun direction &amp; colour</strong> — a low, deep-orange sun makes a sunset; a high white
+  sun makes midday. Low sun = long shadows = drama.</li>
+  <li><strong>Sky &amp; fog palette</strong> — the sky gradient and the fog tint set the whole colour key.</li>
+  <li><strong>Materials</strong> — swap grass/rock/snow for sand, or pink-lit snow.</li>
+  <li><strong>Height &amp; frequency</strong> — taller, lower-frequency fBM gives broad dunes;
+  shorter, higher-frequency gives jagged ridges.</li>
+</ul>
+
+<h2>Sunset alpine</h2>
+
+<p>A low side sun (<code>sun.y ≈ 0.16</code>), an orange-to-violet sky, warm rim light and long cast
+shadows, snow tinted pink. Drag <code>sun</code> to slide it along the horizon and <code>haze</code> for
+the atmosphere.</p>
+
+<div id="lab-sunset"></div>
+<div class="ship">Shadertoy-ready: <a href="https://www.shadertoy.com/new" target="_blank">new shader</a> ↓</div>
+<pre><code id="code-sunset"></code></pre>
+
+<h2>Desert dunes</h2>
+
+<p>Same renderer, but the height is <code>pow(fbm, 1.6)</code> for rounded dunes, a single warm
+<code>sand</code> material with faint ripples, no snow, and a hot pale sky. <code>dunes</code> scales the
+height, <code>sun</code> moves the light.</p>
+
+<div id="lab-desert"></div>
+<div class="ship">Shadertoy-ready: <a href="https://www.shadertoy.com/new" target="_blank">new shader</a> ↓</div>
+<pre><code id="code-desert"></code></pre>
+
+<h2>Check yourself</h2>
+
+<div class="quiz" id="q1"
+  data-q="What most defines the 'sunset' mood versus 'midday'?"
+  data-correct="0"
+  data-options='["A low, warm sun with long cast shadows now","More fBM octaves in the height function","A higher camera flying faster forward","A smaller hit threshold in the marcher"]'
+  data-feedback="Sun height/colour drives the mood: low + warm = sunset and long shadows; high + white = flat midday."></div>
+
+<div class="quiz" id="q2"
+  data-q="How do you turn jagged ridges into rounded dunes?"
+  data-correct="1"
+  data-options='["Increase the marcher hit threshold a lot","Shape the height (e.g. pow(fbm,1.6)), lower frequency","Add snow on every gentle slope of terrain","Switch the sky gradient to a warmer tint"]'
+  data-feedback="Remapping the height (a power curve) and using lower-frequency fBM smooths peaks into broad dunes."></div>
+
+<div class="source">
+  <span class="label">Primary source</span>
+  <a href="https://iquilezles.org/articles/fbm/">IQ — fBM</a> (shaping the height) and
+  <a href="https://www.shadertoy.com/results?query=terrain">Shadertoy terrain shaders</a> to study moods.
+  See <a href="https://github.com/franpiaggio/interactive-shader-course/blob/main/RESOURCES.md">RESOURCES.md</a>.
+</div>
+
+<div class="ask">
+  <span class="label">Other possibilities to chase</span>
+  Ask me to build any of these next: <strong>erosion/ridged peaks</strong> (fBM with analytic
+  derivatives), <strong>a lake</strong> (clip at a water plane + reflect the sky), <strong>domain-warped
+  valleys</strong>, or <a href="https://franpiaggio.github.io/interactive-shader-course/lessons/0011-volumetric-clouds.html">volumetric clouds</a> layered over
+  the terrain for a full sky.
+</div>
+
+<nav class="lesson-nav">
+  <span>← <a href="a3-painting-the-landscape.html">A3</a></span>
+  <span><a href="index.html">Advanced index</a> · <a href="https://franpiaggio.github.io/interactive-shader-course/">Core course</a></span>
+</nav>
+
+</main>
+
+<script type="module" src="../assets/quiz.js"></script>
+<script type="module">
+import { createShaderLab } from '../assets/shader-lab.js';
+
+const CORE = `
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y); }
+const mat2 m2=mat2(0.8,-0.6,0.6,0.8);
+float fbm(vec2 p){ float h=0.0,a=0.5; for(int i=0;i<7;i++){ h+=a*noise(p); p=m2*p*2.0; a*=0.5; } return h; }`;
+const MARCH = `
+float castRay(vec3 ro, vec3 rd){
+  float t=0.5, dt, lastD=ro.y-terrain(ro.xz);
+  for(int i=0;i<240;i++){ vec3 p=ro+rd*t; float d=p.y-terrain(p.xz);
+    if(d<0.0) return t-dt+dt*lastD/(lastD-d);
+    lastD=d; dt=0.01*t+0.05; t+=dt; if(t>160.0) break; }
+  return -1.0;
+}
+vec3 calcNormal(vec3 p, float t){ float e=0.002*t;
+  return normalize(vec3(terrain(p.xz-vec2(e,0.0))-terrain(p.xz+vec2(e,0.0)), 2.0*e,
+                        terrain(p.xz-vec2(0.0,e))-terrain(p.xz+vec2(0.0,e)))); }
+float shadow(vec3 p, vec3 sun){ float res=1.0, t=0.6;
+  for(int i=0;i<24;i++){ vec3 q=p+sun*t; float h=q.y-terrain(q.xz);
+    res=min(res, 10.0*h/t); if(h<0.0) return 0.0; t+=clamp(h,0.4,6.0); if(t>50.0) break; }
+  return clamp(res,0.0,1.0); }
+float vig(vec2 fc, vec3 res){ vec2 q=fc/res.xy; return 0.5+0.5*pow(16.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.15); }`;
+
+const SUNSET = CORE + `
+float terrain(vec2 p){ return 8.5*fbm(p*0.11); }` + MARCH + `
+vec3 skyCol(vec3 rd, vec3 sun){
+  vec3 col=mix(vec3(0.95,0.45,0.25), vec3(0.18,0.10,0.30), clamp(rd.y*1.3+0.1,0.0,1.0));
+  float sd=clamp(dot(rd,sun),0.0,1.0);
+  col=mix(col, vec3(1.0,0.7,0.35), pow(sd,3.0)*0.7); col+=vec3(1.0,0.6,0.3)*pow(sd,400.0)*2.0; return col; }
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  vec2 uv=(fragCoord-0.5*iResolution.xy)/iResolution.y;
+  vec3 sun=normalize(vec3(uSunX,0.16,0.5));
+  vec3 ro=vec3(0.0,12.0,iTime*3.0); vec3 ta=ro+vec3(0.0,-0.7,4.0);
+  vec3 ww=normalize(ta-ro),uu=normalize(cross(ww,vec3(0,1,0))),vv=cross(uu,ww);
+  vec3 rd=normalize(uu*uv.x+vv*uv.y+ww*1.4);
+  float t=castRay(ro,rd); vec3 col;
+  if(t<0.0){ col=skyCol(rd,sun); }
+  else{ vec3 p=ro+rd*t; vec3 n=calcNormal(p,t); float slope=n.y,h01=clamp(terrain(p.xz)/8.5,0.0,1.0);
+    vec3 grass=vec3(0.20,0.16,0.10),rock=vec3(0.26,0.18,0.15),snow=vec3(1.0,0.85,0.8);
+    vec3 mat=mix(rock,grass,smoothstep(0.6,0.85,slope));
+    mat=mix(mat,snow,smoothstep(0.62,0.82,h01)*smoothstep(0.55,0.8,slope));
+    float dif=clamp(dot(n,sun),0.0,1.0), sh=shadow(p+n*0.2,sun), sky=clamp(0.5+0.5*n.y,0.0,1.0);
+    col=mat*(vec3(1.8,0.9,0.5)*dif*sh + vec3(0.25,0.15,0.30)*sky);
+    vec3 fogCol=mix(vec3(0.6,0.35,0.4), vec3(1.0,0.6,0.3), pow(clamp(dot(rd,sun),0.0,1.0),3.0));
+    col=mix(col, fogCol, 1.0-exp(-uHaze*t*t)); }
+  col*=vig(fragCoord,iResolution); col=pow(col,vec3(0.4545)); fragColor=vec4(col,1.0); }`;
+
+const DESERT = CORE + `
+float terrain(vec2 p){ return uHeight*pow(fbm(p*0.10),1.6); }` + MARCH + `
+vec3 skyCol(vec3 rd, vec3 sun){
+  vec3 col=mix(vec3(0.55,0.72,0.92), vec3(0.20,0.45,0.80), clamp(rd.y*1.4,0.0,1.0));
+  float sd=clamp(dot(rd,sun),0.0,1.0);
+  col=mix(col, vec3(1.0,0.92,0.7), pow(sd,5.0)*0.4*clamp(1.0-rd.y*2.5,0.0,1.0));
+  col+=vec3(1.0,0.9,0.7)*pow(sd,300.0); return col; }
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  vec2 uv=(fragCoord-0.5*iResolution.xy)/iResolution.y;
+  vec3 sun=normalize(vec3(uSunX,0.30,0.6));
+  vec3 ro=vec3(0.0,10.5,iTime*3.0); vec3 ta=ro+vec3(0.0,-0.85,4.0);
+  vec3 ww=normalize(ta-ro),uu=normalize(cross(ww,vec3(0,1,0))),vv=cross(uu,ww);
+  vec3 rd=normalize(uu*uv.x+vv*uv.y+ww*1.4);
+  float t=castRay(ro,rd); vec3 col;
+  if(t<0.0){ col=skyCol(rd,sun); }
+  else{ vec3 p=ro+rd*t; vec3 n=calcNormal(p,t);
+    vec3 sand=vec3(0.78,0.60,0.36); sand*=0.92+0.08*noise(p.xz*3.0);
+    float dif=clamp(dot(n,sun),0.0,1.0), sh=shadow(p+n*0.2,sun), sky=clamp(0.5+0.5*n.y,0.0,1.0);
+    col=sand*(vec3(1.5,1.25,0.9)*dif*sh + vec3(0.30,0.35,0.45)*sky);
+    col=mix(col, vec3(0.8,0.78,0.7), 1.0-exp(-0.0006*t*t)); }
+  col*=vig(fragCoord,iResolution); col=pow(col,vec3(0.4545)); fragColor=vec4(col,1.0); }`;
+
+createShaderLab(document.getElementById('lab-sunset'), {
+  height: 400,
+  uniforms: [
+    { name: 'uSunX', label: 'sun',  min: -1.0, max: -0.2, value: -0.85 },
+    { name: 'uHaze', label: 'haze', min: 0.0003, max: 0.0016, step: 0.0001, value: 0.0007 },
+  ],
+  source: SUNSET,
+});
+createShaderLab(document.getElementById('lab-desert'), {
+  height: 400,
+  uniforms: [
+    { name: 'uSunX',   label: 'sun',   min: -1.0, max: 0.2, value: -0.6 },
+    { name: 'uHeight', label: 'dunes', min: 3.0, max: 10.0, value: 6.5 },
+  ],
+  source: DESERT,
+});
+
+document.getElementById('code-sunset').textContent =
+  '// Sunset alpine — paste into shadertoy.com/new. Tweak these:\nconst float uSunX=-0.85, uHaze=0.0007;\n' + SUNSET;
+document.getElementById('code-desert').textContent =
+  '// Desert dunes — paste into shadertoy.com/new. Tweak these:\nconst float uSunX=-0.6, uHeight=6.5;\n' + DESERT;
+</script>
+</body>
+</html>

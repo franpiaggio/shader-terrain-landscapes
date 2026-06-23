@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Advanced — Terrain &amp; Landscapes</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<style>
+  body { max-width: 60rem; }
+  .group-label { font: 600 0.72rem/1 ui-monospace, monospace; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--accent); margin: 2.4rem 0 1rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--rule); }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; max-width: none; }
+  @media (max-width: 680px){ .cards { grid-template-columns: 1fr; } }
+  .card { display: block; border: 1px solid var(--rule); border-radius: 8px; padding: 1.1rem 1.2rem;
+    background: var(--code-bg); text-decoration: none; color: var(--ink); transition: border-color .12s, transform .12s; }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card .n { font: 700 0.72rem/1 ui-monospace, monospace; color: var(--accent); letter-spacing: 0.08em; }
+  .card h3 { margin: 0.4rem 0; font-size: 1.12rem; }
+  .card p { margin: 0; font-size: 0.92rem; color: var(--ink-soft); line-height: 1.45; }
+  .card .win { display:inline-block; margin-top:0.6rem; font: 0.72rem/1 ui-monospace,monospace; color: var(--ok); }
+  .runhint { font-size:0.85rem; color:var(--ink-soft); background:var(--code-bg); border-left:3px solid var(--accent-dim);
+    padding:0.7rem 1rem; border-radius:0 4px 4px 0; margin:1.4rem 0; max-width:44rem; }
+  .docs { display:flex; flex-wrap:wrap; gap:0.7rem; margin-top:1rem; } .docs a { font-size:0.85rem; }
+  code { font-size:0.82em; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <p class="kicker">Interactive Shader Course · Advanced Track</p>
+  <h1>Terrain &amp; Landscapes</h1>
+  <p class="standfirst">You can raymarch a sphere — now raymarch a <em>world</em>. This track builds an
+  Iñigo-Quílez-style landscape renderer step by step: heightfield marching, noise terrain, slope/height
+  materials, fog and sun. By the end you have a flythrough vista you can post.</p>
+</header>
+
+<main>
+
+<p style="max-width:44rem;color:var(--ink-soft);font-style:italic">
+  Prerequisites: the <a href="https://franpiaggio.github.io/interactive-shader-course/">core course</a> — especially raymarching (L4), fBM noise
+  (L11), and lighting/fog (L7). Terrain uses a different marching trick than SDFs, but every other tool
+  carries over.</p>
+
+<div class="runhint">
+  <strong>Run over HTTP.</strong> From the project root: <code>python3 -m http.server 8777</code> →
+  open <code>http://localhost:8777/advanced/index.html</code>. Each lab has a ▶ Run button.
+</div>
+
+<div class="docs">
+  <a href="https://franpiaggio.github.io/interactive-shader-course/">← Core course</a> ·
+  <a href="https://github.com/franpiaggio/interactive-shader-course/blob/main/RESOURCES.md">Resources</a> ·
+  <a href="https://iquilezles.org/articles/terrainmarching/">IQ · Terrain marching</a>
+</div>
+
+<div class="group-label">The track</div>
+<div class="cards">
+  <a class="card" href="a1-heightfield-raymarching.html">
+    <span class="n">A1</span>
+    <h3>Heightfield raymarching</h3>
+    <p>Why SDF tracing doesn't fit terrain — march and compare the ray to a height map <code>h(x,z)</code>.</p>
+    <span class="win">win · a raymarched mountain</span>
+  </a>
+  <a class="card" href="a2-noise-terrain-and-light.html">
+    <span class="n">A2</span>
+    <h3>Noise terrain &amp; light</h3>
+    <p>fBM as the height map; normals from finite differences; diffuse + sky. Rolling lit hills.</p>
+    <span class="win">win · a lit landform</span>
+  </a>
+  <a class="card" href="a3-painting-the-landscape.html">
+    <span class="n">A3</span>
+    <h3>Painting the landscape</h3>
+    <p>Materials by slope &amp; height (grass/rock/snow), distance fog, sun &amp; sky — a believable vista.</p>
+    <span class="win">win · a postable flythrough</span>
+  </a>
+  <a class="card" href="a4-variants-and-moods.html">
+    <span class="n">A4</span>
+    <h3>Variants &amp; moods</h3>
+    <p>The same renderer as a fiery sunset and a sun-baked desert — the few knobs that carry a mood.</p>
+    <span class="win">win · sunset + desert, your own looks</span>
+  </a>
+</div>
+
+<p style="margin-top:2.5rem;color:var(--ink-soft);font-size:0.9rem">
+  Grounded in Iñigo Quílez's landscape work: <a href="https://iquilezles.org/articles/terrainmarching/">Terrain marching</a>,
+  <a href="https://iquilezles.org/articles/fbm/">fBM</a>,
+  <a href="https://iquilezles.org/articles/morenoise/">noise derivatives</a>, and his
+  <a href="https://www.youtube.com/watch?v=BFld4EBO2RE">"Painting a landscape with maths"</a> talk.</p>
+
+</main>
+</body>
+</html>
