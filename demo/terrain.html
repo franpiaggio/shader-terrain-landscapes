@@ -5,32 +5,40 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Raymarched terrain — live demo</title>
 <style>
-  html,body{margin:0;height:100%;background:#0c0e15;overflow:hidden;font-family:Helvetica,Arial,sans-serif;}
-  #gl{display:block;width:100vw;height:100vh;cursor:crosshair;}
-  .ui{position:fixed;left:22px;top:20px;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7);pointer-events:none;}
-  .ui .k{font:700 12px/1 ui-monospace,monospace;letter-spacing:.18em;color:#e6885f;}
-  .ui h1{font-size:26px;font-weight:800;margin:6px 0 4px;}
-  .ui p{font:13px/1.5 ui-monospace,monospace;color:#cdd6e6;margin:0;opacity:.9;}
-  .bar{position:fixed;right:18px;top:18px;display:flex;gap:10px;}
-  .bar a,.bar button{pointer-events:auto;cursor:pointer;font:600 13px/1 ui-monospace,monospace;
-    color:#fff;background:rgba(20,24,34,.6);border:1px solid #2a2d39;border-radius:999px;
-    padding:9px 14px;text-decoration:none;backdrop-filter:blur(6px);}
-  .bar a:hover,.bar button:hover{background:#e6885f;border-color:#e6885f;}
-  #err{position:fixed;left:22px;bottom:18px;color:#e6885f;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap;max-width:80vw;}
+  :root{ --accent:#e6885f; }
+  html,body{margin:0;min-height:100%;background:#0c0e15;color:#f1eee5;
+    font-family:Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;}
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px;}
+  .head{text-align:center;}
+  .head .k{font:700 12px/1 ui-monospace,monospace;letter-spacing:.18em;color:var(--accent);}
+  .head h1{font-size:24px;font-weight:800;margin:6px 0 2px;}
+  .head p{font:13px/1.4 ui-monospace,monospace;color:#9aa0b0;margin:0;}
+  /* the shader lives in a fixed-size SQUARE; GPU work is bounded -> always smooth */
+  .stage{position:relative;width:min(82vmin,720px);aspect-ratio:1/1;border-radius:12px;overflow:hidden;
+    border:1px solid #2a2d39;background:#000;box-shadow:0 18px 50px rgba(0,0,0,.5);}
+  #gl{display:block;width:100%;height:100%;cursor:crosshair;}
+  .stage:fullscreen{width:100vmin;height:100vmin;border-radius:0;border:none;}
+  .bar{display:flex;gap:10px;}
+  .bar a,.bar button{cursor:pointer;font:600 13px/1 ui-monospace,monospace;color:#fff;
+    background:rgba(20,24,34,.6);border:1px solid #2a2d39;border-radius:999px;padding:9px 15px;text-decoration:none;}
+  .bar a:hover,.bar button:hover{background:var(--accent);border-color:var(--accent);}
+  #err{color:var(--accent);font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap;max-width:80vw;}
 </style>
 </head>
 <body>
-<canvas id="gl"></canvas>
-<div class="ui">
-  <div class="k">SHADER · TERRAIN &amp; LANDSCAPES</div>
-  <h1>One fragment shader, a whole world</h1>
-  <p>move the mouse to look around · it flies itself</p>
+<div class="wrap">
+  <div class="head">
+    <div class="k">SHADER · TERRAIN &amp; LANDSCAPES</div>
+    <h1>One fragment shader, a whole world</h1>
+    <p>move the mouse over the square to look around · it flies itself</p>
+  </div>
+  <div class="stage" id="stage"><canvas id="gl"></canvas></div>
+  <div class="bar">
+    <a href="../index.html">📚 Learning path</a>
+    <button id="fs">⤢ Fullscreen</button>
+  </div>
+  <div id="err"></div>
 </div>
-<div class="bar">
-  <a href="../index.html">↩ Learning path</a>
-  <button id="fs">⤢ Fullscreen</button>
-</div>
-<div id="err"></div>
 
 <script id="frag" type="x-shader/frag">
 float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
@@ -46,14 +54,14 @@ float terrainAt(vec2 p, float dist){
   return 7.0*h;
 }
 float castRay(vec3 ro, vec3 rd){ float t=0.5,dt,lastD=ro.y-terrainAt(ro.xz,0.0);
-  for(int i=0;i<260;i++){ vec3 p=ro+rd*t; float d=p.y-terrainAt(p.xz,t);
-    if(d<0.0) return t-dt+dt*lastD/(lastD-d); lastD=d; dt=0.011*t+0.06; t+=dt; if(t>220.0) break; } return -1.0; }
+  for(int i=0;i<220;i++){ vec3 p=ro+rd*t; float d=p.y-terrainAt(p.xz,t);
+    if(d<0.0) return t-dt+dt*lastD/(lastD-d); lastD=d; dt=0.012*t+0.07; t+=dt; if(t>200.0) break; } return -1.0; }
 vec3 calcNormal(vec3 p, float t){ float e=0.004*t+0.03;
   return normalize(vec3(terrainAt(p.xz-vec2(e,0.0),t)-terrainAt(p.xz+vec2(e,0.0),t), 2.0*e,
                         terrainAt(p.xz-vec2(0.0,e),t)-terrainAt(p.xz+vec2(0.0,e),t))); }
 float shadow(vec3 p, vec3 sun, float dist){ float res=1.0,t=0.8;
-  for(int i=0;i<20;i++){ vec3 q=p+sun*t; float h=q.y-terrainAt(q.xz,dist);
-    res=min(res,9.0*h/t); if(h<0.0) return 0.0; t+=clamp(h,0.8,8.0); if(t>50.0) break; } return clamp(res,0.0,1.0); }
+  for(int i=0;i<16;i++){ vec3 q=p+sun*t; float h=q.y-terrainAt(q.xz,dist);
+    res=min(res,9.0*h/t); if(h<0.0) return 0.0; t+=clamp(h,0.9,9.0); if(t>50.0) break; } return clamp(res,0.0,1.0); }
 vec3 skyAndClouds(vec3 ro, vec3 rd, vec3 sun){
   vec3 col=mix(vec3(0.32,0.55,0.9), vec3(0.06,0.18,0.45), clamp(rd.y*1.3,0.0,1.0));
   float sd=clamp(dot(rd,sun),0.0,1.0);
@@ -100,7 +108,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord){
 </script>
 
 <script>
+const RENDER = 640;                  // fixed internal resolution -> bounded, guaranteed-smooth cost
 const canvas = document.getElementById('gl');
+canvas.width = RENDER; canvas.height = RENDER;
 const gl = canvas.getContext('webgl2', {antialias:false});
 const err = document.getElementById('err');
 const VERT = `#version 300 es
@@ -111,39 +121,32 @@ uniform vec3 iResolution; uniform float iTime; uniform float uMouseX; uniform fl
 out vec4 _fragColor;
 `;
 const POST = `\nvoid main(){ mainImage(_fragColor, gl_FragCoord.xy); }`;
-
 function compile(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
   if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) err.textContent='shader error:\n'+gl.getShaderInfoLog(s); return s; }
 
-const frag = PRE + document.getElementById('frag').textContent + POST;
 const p = gl.createProgram();
 gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT));
-gl.attachShader(p, compile(gl.FRAGMENT_SHADER, frag));
+gl.attachShader(p, compile(gl.FRAGMENT_SHADER, PRE + document.getElementById('frag').textContent + POST));
 gl.bindAttribLocation(p,0,'aPos'); gl.linkProgram(p);
 const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.useProgram(p); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
 const L = {res:gl.getUniformLocation(p,'iResolution'), time:gl.getUniformLocation(p,'iTime'),
            mx:gl.getUniformLocation(p,'uMouseX'), my:gl.getUniformLocation(p,'uMouseY')};
+gl.viewport(0,0,RENDER,RENDER);
+gl.uniform3f(L.res, RENDER, RENDER, 1);
 
-// mouse (smoothed) — works on hover, no click needed
+// mouse relative to the square (0..1), smoothed; hover works (no click)
 let tmx=0.5, tmy=0.42, mx=0.5, my=0.42;
-addEventListener('pointermove', e=>{ tmx=e.clientX/innerWidth; tmy=e.clientY/innerHeight; });
+canvas.addEventListener('pointermove', e=>{ const r=canvas.getBoundingClientRect();
+  tmx=(e.clientX-r.left)/r.width; tmy=(e.clientY-r.top)/r.height; });
 
-function resize(){ const dpr=Math.min(devicePixelRatio||1,2);
-  canvas.width=Math.floor(innerWidth*dpr); canvas.height=Math.floor(innerHeight*dpr); }
-resize(); addEventListener('resize', resize);
-
-document.getElementById('fs').onclick=()=>{
-  if(document.fullscreenElement) document.exitFullscreen();
-  else document.documentElement.requestFullscreen();
-};
+document.getElementById('fs').onclick=()=>{ const s=document.getElementById('stage');
+  if(document.fullscreenElement) document.exitFullscreen(); else s.requestFullscreen(); };
 
 const t0=performance.now();
 function frame(){
-  mx += (tmx-mx)*0.06; my += (tmy-my)*0.06;          // smooth the look
-  gl.viewport(0,0,canvas.width,canvas.height);
-  gl.uniform3f(L.res, canvas.width, canvas.height, 1);
+  mx += (tmx-mx)*0.06; my += (tmy-my)*0.06;
   gl.uniform1f(L.time, (performance.now()-t0)/1000);
   gl.uniform1f(L.mx, mx); gl.uniform1f(L.my, my);
   gl.drawArrays(gl.TRIANGLES,0,3);

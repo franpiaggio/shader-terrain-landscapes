@@ -7,7 +7,7 @@ can paste straight into [Shadertoy](https://www.shadertoy.com/), plus sunset and
 Every lesson runs **live in the page**: real WebGL shaders, draggable sliders, and ▶ Run buttons. No build
 step, no dependencies.
 
-> **▶ Full-screen live demo:** https://franpiaggio.github.io/shader-terrain-landscapes/demo/terrain.html — fly through a raymarched landscape (move the mouse to look)
+> **▶ Live terrain demo:** https://franpiaggio.github.io/shader-terrain-landscapes/demo/terrain.html — fly through a raymarched landscape (move the mouse; runs at a fixed 640² for smooth performance, fullscreen optional)
 > **📚 Learning path:** https://franpiaggio.github.io/shader-terrain-landscapes/
 
 <!-- Add a screenshot for your post, e.g.: ![preview](preview.png) -->
