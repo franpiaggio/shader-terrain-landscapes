@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Elevated-style terrain — live demo</title>
+<style>
+  :root{ --accent:#e6885f; }
+  html,body{margin:0;min-height:100vh;background:#0c0e15;color:#f1eee5;
+    font-family:Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px;}
+  .head{text-align:center;}
+  .head .k{font:700 12px/1 ui-monospace,monospace;letter-spacing:.18em;color:var(--accent);}
+  .head h1{font-size:24px;font-weight:800;margin:6px 0 2px;}
+  .head p{font:13px/1.4 ui-monospace,monospace;color:#9aa0b0;margin:0;}
+  .stage{position:relative;width:min(82vmin,720px);aspect-ratio:1/1;border-radius:12px;overflow:hidden;
+    border:1px solid #2a2d39;background:#000;box-shadow:0 18px 50px rgba(0,0,0,.5);}
+  #gl{display:block;width:100%;height:100%;cursor:crosshair;}
+  .stage:fullscreen{width:100vmin;height:100vmin;border-radius:0;border:none;}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+  .bar a,.bar button{cursor:pointer;font:600 13px/1 ui-monospace,monospace;color:#fff;
+    background:rgba(20,24,34,.6);border:1px solid #2a2d39;border-radius:999px;padding:9px 15px;text-decoration:none;}
+  .bar a:hover,.bar button:hover{background:var(--accent);border-color:var(--accent);}
+  .credit{font:12px/1.5 ui-monospace,monospace;color:#7e8aa3;text-align:center;max-width:560px;}
+  .credit a{color:#cdd6e6;}
+  #err{color:var(--accent);font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap;max-width:80vw;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="k">SHADER · TERRAIN &amp; LANDSCAPES</div>
+    <h1>Raymarched mountains — live</h1>
+    <p>move the mouse over the square to look around · it flies itself</p>
+  </div>
+  <div class="stage" id="stage"><canvas id="gl"></canvas></div>
+  <div class="bar">
+    <a href="../index.html">📚 Learning path</a>
+    <a href="https://iquilezles.org/articles/terrainmarching/" target="_blank">📖 IQ · terrain marching</a>
+    <button id="fs">⤢ Fullscreen</button>
+  </div>
+  <div class="credit">
+    Terrain technique by <a href="https://iquilezles.org/" target="_blank"><b>Iñigo Quílez</b></a> —
+    his <a href="https://www.shadertoy.com/view/MdX3Rr" target="_blank">“Elevated”</a> shader and articles on
+    <a href="https://iquilezles.org/articles/morenoise/" target="_blank">noise derivatives / erosion</a>,
+    <a href="https://iquilezles.org/articles/terrainmarching/" target="_blank">terrain marching</a>,
+    <a href="https://iquilezles.org/articles/rmshadows/" target="_blank">soft shadows</a> and
+    <a href="https://iquilezles.org/articles/fog/" target="_blank">fog</a>.
+    This is an original re-implementation of those techniques for educational purposes, rendered at a fixed
+    640² for smooth performance.
+  </div>
+  <div id="err"></div>
+</div>
+
+<script id="frag" type="x-shader/frag">
+// Terrain built on techniques by Iñigo Quilez (https://iquilezles.org/): value-noise derivatives
+// & erosion (morenoise), terrain marching, soft shadows, fog, outdoor lighting. Original
+// re-implementation for educational use. Credit: Iñigo Quilez.
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y); }
+const mat2 m2=mat2(0.8,-0.6,0.6,0.8);
+float fbm2(vec2 p){ float h=0.0,a=0.5; for(int i=0;i<5;i++){ h+=a*noise(p); p=m2*p*2.0; a*=0.5; } return h; }
+vec3 noised(vec2 x){
+  vec2 i=floor(x), f=fract(x);
+  vec2 u=f*f*f*(f*(f*6.0-15.0)+10.0);
+  vec2 du=30.0*f*f*(f*(f-2.0)+1.0);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return vec3(a+(b-a)*u.x+(c-a)*u.y+(a-b-c+d)*u.x*u.y,
+              du*(vec2(b-a,c-a)+(a-b-c+d)*u.yx));
+}
+const float H=16.0;
+vec2 warp(vec2 x){ vec2 w=vec2(noise(x*0.012), noise(x*0.012+vec2(31.4,12.1))); return x + (w-0.5)*22.0; }
+float shapeM(vec2 x){ vec2 p=warp(x)*0.022; float a=0.0,b=1.0; vec2 d=vec2(0.0);
+  for(int i=0;i<7;i++){ vec3 n=noised(p); d+=n.yz; a+=b*n.x/(1.0+dot(d,d)); b*=0.5; p=m2*p*2.0; } return a; }
+float shapeH(vec2 x){ vec2 p=warp(x)*0.022; float a=0.0,b=1.0; vec2 d=vec2(0.0);
+  for(int i=0;i<11;i++){ vec3 n=noised(p); d+=n.yz; a+=b*n.x/(1.0+dot(d,d)); b*=0.5; p=m2*p*2.0; } return a; }
+float terrainM(vec2 x){ return H*shapeM(x); }
+float terrainH(vec2 x){ return H*shapeH(x); }
+float castRay(vec3 ro, vec3 rd){
+  float t=0.5, tmax=520.0;
+  for(int i=0;i<300;i++){ vec3 p=ro+t*rd; float h=p.y-terrainM(p.xz);
+    if(h<0.0015*t || t>tmax) break; t+=0.4*h; }
+  return (t>tmax)?-1.0:t;
+}
+vec3 calcNormal(vec3 p, float t){ vec2 e=vec2(0.0015*t+0.01,0.0);
+  return normalize(vec3(terrainH(p.xz-e.xy)-terrainH(p.xz+e.xy), 2.0*e.x,
+                        terrainH(p.xz-e.yx)-terrainH(p.xz+e.yx))); }
+float shadow(vec3 ro, vec3 rd){ float res=1.0,t=0.5;
+  for(int i=0;i<40;i++){ vec3 p=ro+t*rd; float h=p.y-terrainM(p.xz);
+    res=min(res,12.0*h/t); t+=max(0.5,h); if(res<0.01||p.y>H*1.5) break; } return clamp(res,0.0,1.0); }
+vec3 sky(vec3 ro, vec3 rd, vec3 sun){
+  vec3 col=mix(vec3(0.34,0.56,0.9), vec3(0.06,0.18,0.46), clamp(rd.y*1.3,0.0,1.0));
+  float sd=clamp(dot(rd,sun),0.0,1.0);
+  col=mix(col, vec3(0.95,0.78,0.6), pow(sd,5.0)*0.55*clamp(1.0-rd.y*2.5,0.0,1.0));
+  col+=vec3(1.0,0.9,0.65)*pow(sd,180.0);
+  col+=vec3(1.0,0.7,0.4)*pow(sd,8.0)*0.25;
+  if(rd.y>0.005){
+    float tp=(95.0-ro.y)/rd.y;
+    vec2 cp=(ro+rd*tp).xz*0.006 + vec2(iTime*0.012,0.0);
+    float cl=smoothstep(0.34,0.62,fbm2(cp*1.3));
+    float li=smoothstep(0.34,0.62,fbm2((cp+sun.xz*0.10)*1.3));
+    vec3 cc=mix(vec3(0.6,0.64,0.76), vec3(1.0,0.99,0.96), clamp((cl-li)*3.0+0.7,0.0,1.0));
+    col=mix(col, cc, cl*smoothstep(0.0,0.12,rd.y)*0.95);
+  }
+  return col;
+}
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  vec2 uv=(fragCoord-0.5*iResolution.xy)/iResolution.y;
+  vec3 sun=normalize(vec3(-0.95,0.28,0.2));
+  float yaw=(uMouseX-0.5)*1.6;
+  float pitch=-(uMouseY-0.5)*0.5 - 0.30;
+  vec3 ro=vec3(0.0, 30.0, iTime*4.0);
+  vec3 ww=normalize(vec3(sin(yaw), pitch, cos(yaw)));
+  vec3 uu=normalize(cross(ww,vec3(0,1,0))), vv=cross(uu,ww);
+  vec3 rd=normalize(uu*uv.x+vv*uv.y+ww*1.4);
+  vec3 col; float t=castRay(ro,rd);
+  if(t<0.0){ col=sky(ro,rd,sun); }
+  else{
+    vec3 p=ro+t*rd; vec3 n=calcNormal(p,t);
+    float slope=n.y, h01=clamp(p.y/H,0.0,1.0);
+    vec3 grass=vec3(0.13,0.27,0.07), rock=vec3(0.30,0.24,0.18), snow=vec3(0.95,0.96,1.0);
+    vec3 mat=mix(rock,grass,smoothstep(0.55,0.82,slope));
+    mat=mix(mat,snow,smoothstep(0.55,0.78,h01)*smoothstep(0.45,0.75,slope));
+    float dif=clamp(dot(n,sun),0.0,1.0), sh=0.28+0.72*shadow(p+n*0.2+sun*0.3,sun), skyl=clamp(0.5+0.5*n.y,0.0,1.0);
+    float ao=clamp(0.4+0.6*h01,0.0,1.0);
+    col=mat*(vec3(1.45,1.18,0.85)*dif*sh + vec3(0.24,0.32,0.48)*skyl*ao);
+    vec3 fogCol=mix(vec3(0.55,0.66,0.82), vec3(0.95,0.72,0.5), pow(clamp(dot(rd,sun),0.0,1.0),5.0));
+    fogCol=mix(fogCol, sky(ro,rd,sun), 0.6);
+    col=mix(col, fogCol, 1.0-exp(-0.00009*t*t));
+  }
+  col=col/(1.0+col*0.32)*1.18;
+  vec2 q=fragCoord/iResolution.xy;
+  col*=0.5+0.5*pow(16.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.12);
+  col=pow(col, vec3(0.4545));
+  fragColor=vec4(col,1.0);
+}
+</script>
+
+<script>
+const RENDER = 640;
+const canvas = document.getElementById('gl');
+canvas.width = RENDER; canvas.height = RENDER;
+const gl = canvas.getContext('webgl2', {antialias:false});
+const err = document.getElementById('err');
+const VERT = `#version 300 es
+in vec2 aPos; void main(){ gl_Position=vec4(aPos,0.0,1.0); }`;
+const PRE = `#version 300 es
+precision highp float;
+uniform vec3 iResolution; uniform float iTime; uniform float uMouseX; uniform float uMouseY;
+out vec4 _fragColor;
+`;
+const POST = `\nvoid main(){ mainImage(_fragColor, gl_FragCoord.xy); }`;
+function compile(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) err.textContent='shader error:\n'+gl.getShaderInfoLog(s); return s; }
+const p = gl.createProgram();
+gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(p, compile(gl.FRAGMENT_SHADER, PRE + document.getElementById('frag').textContent + POST));
+gl.bindAttribLocation(p,0,'aPos'); gl.linkProgram(p);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+gl.useProgram(p); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+const L = {res:gl.getUniformLocation(p,'iResolution'), time:gl.getUniformLocation(p,'iTime'),
+           mx:gl.getUniformLocation(p,'uMouseX'), my:gl.getUniformLocation(p,'uMouseY')};
+gl.viewport(0,0,RENDER,RENDER); gl.uniform3f(L.res, RENDER, RENDER, 1);
+let tmx=0.5, tmy=0.42, mx=0.5, my=0.42;
+canvas.addEventListener('pointermove', e=>{ const r=canvas.getBoundingClientRect();
+  tmx=(e.clientX-r.left)/r.width; tmy=(e.clientY-r.top)/r.height; });
+document.getElementById('fs').onclick=()=>{ const s=document.getElementById('stage');
+  if(document.fullscreenElement) document.exitFullscreen(); else s.requestFullscreen(); };
+const t0=performance.now();
+function frame(){
+  mx += (tmx-mx)*0.05; my += (tmy-my)*0.05;
+  gl.uniform1f(L.time, (performance.now()-t0)/1000);
+  gl.uniform1f(L.mx, mx); gl.uniform1f(L.my, my);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
