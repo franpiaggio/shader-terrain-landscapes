@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A6 — Detail &amp; performance</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<style>
+  .ship { margin: 1rem 0 2.5rem; padding: 0.9rem 1.1rem; border-radius: 6px; background: var(--code-bg);
+    border-left: 3px solid var(--accent); font-size: 0.9rem; max-width: var(--measure); }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <p class="kicker">Advanced · Terrain &amp; Landscapes · A6 · Going pro</p>
+  <h1>Detail &amp; performance</h1>
+  <p class="standfirst">More octaves means crisper mountains — but the ray march samples the terrain
+  <em>hundreds</em> of times per pixel, so every octave you add to it is paid hundreds of times over. The
+  pro move is to spend detail only where it's seen: a cheap terrain for the march, an expensive one for the
+  final shading. Then warp the ground so the ridgelines stop looking like a grid.</p>
+</header>
+
+<main>
+
+<div class="goal">
+  <span class="label">Your win this lesson</span>
+  Split the height map into a <strong>cheap marched terrain</strong> and a <strong>detailed normal
+  terrain</strong> (level-of-detail), and add <strong>domain warping</strong> — sharper, more natural
+  mountains that also run faster.
+</div>
+
+<h2>Where the time goes</h2>
+
+<p>Look at how often <code>terrain()</code> is called for a single pixel:</p>
+<ul>
+  <li><strong>The march</strong> (<code>castRay</code>) — up to a couple hundred steps, one terrain lookup
+  each. This dominates the cost.</li>
+  <li><strong>The shadow ray</strong> — a few dozen more lookups.</li>
+  <li><strong>The normal</strong> — exactly <em>two</em> lookups (a finite difference), once, at the hit.</li>
+</ul>
+<p>So a fine octave added to the marched terrain is paid ~200×; the same octave added only to the normal is
+paid twice. The trick is obvious once you see it: <strong>march a coarse terrain, shade a detailed one.</strong></p>
+
+<h2>Two terrains, one shape</h2>
+
+<p>Same function, different octave counts. The marcher and shadow use the cheap one; only the normal — the
+thing that actually carries surface detail to your eye — uses the expensive one:</p>
+
+<pre><code>float terrainM(vec2 x){ return H * fbmN(warp(x), 7);  }   // medium — march &amp; shadows
+float terrainH(vec2 x){ return H * fbmN(warp(x), 12); }   // high   — the normal only
+
+// castRay(...)  uses terrainM      ← the hot path, kept cheap
+// calcNormal(...) uses terrainH    ← runs twice, can afford the detail</code></pre>
+
+<p>Because the extra octaves are small, the coarse surface and the detailed surface share the same big
+shape — the ray lands in the right place against <code>terrainM</code>, and <code>terrainH</code> just
+adds crisp relief to the lighting. This is exactly how IQ's "Elevated" runs in real time.</p>
+
+<h2>Domain warping — kill the grid</h2>
+
+<p>Noise sits on an axis-aligned lattice, so ridgelines tend to run along x/z. <strong>Warp</strong> the
+input coordinate by a low-frequency noise before sampling and the ridges meander like real geology:</p>
+
+<pre><code>vec2 warp(vec2 x){ vec2 w = vec2(noise(x*0.05), noise(x*0.05 + 31.4));
+                   return x + amount*(w - 0.5); }     // push the lookup sideways</code></pre>
+
+<h2>Play — feel the trade-off</h2>
+
+<p><code>march detail</code> sets the octaves the <em>marcher</em> uses — drag it down and the silhouette
+gets blocky and cheap, but the surface stays crisp because the <em>normal</em> always uses full detail.
+<code>warp</code> bends the ridgelines; <code>sun</code> moves the light. Camera flies forward.</p>
+
+<div id="lab-play"></div>
+
+<div class="ship">Shadertoy-ready (slider values baked as consts):
+  <a href="https://www.shadertoy.com/new" target="_blank">open a new shader</a> and paste ↓</div>
+<pre><code id="code-lod"></code></pre>
+
+<div class="pitfall">
+  <span class="label">Watch for</span>
+  Two ways this bites. If <code>terrainM</code> is <em>too</em> coarse, the marched silhouette and the
+  detailed normal disagree near steep edges and you get shimmer — keep the medium terrain within a few
+  octaves of the high one. And warp is sampled inside the hot march loop, so keep its noise cheap (one or
+  two lookups), or you give back the speed the LOD just bought you.
+</div>
+
+<h2>Ship it: render at a fixed resolution</h2>
+
+<p>The biggest performance lever isn't in the shader at all — it's how many pixels you run it on. A
+raymarched terrain at full 4K is brutal; the same shader at a fixed <code>640²</code> (then scaled up by
+the browser) is buttery and looks nearly identical in motion. The
+<a href="../demo/elevated.html">live demo</a> does exactly this: a fixed-size canvas drawn with a single
+full-screen triangle. Resolution is your first dial when a landscape stutters.</p>
+
+<h2>Check yourself</h2>
+
+<div class="quiz" id="q1"
+  data-q="Why add fine octaves to the normal but not to the marcher?"
+  data-correct="0"
+  data-options='["The march samples terrain hundreds of times; the normal twice","The normal cannot read more than twelve octaves","The marcher already adds detail through its step size","Fine octaves break the sign-change test in the march"]'
+  data-feedback="Cost scales with how often terrain() is called. The march is the hot path; the normal runs twice, so detail there is nearly free."></div>
+
+<div class="quiz" id="q2"
+  data-q="What does domain warping fix in the terrain?"
+  data-correct="1"
+  data-options='["Slopes that are too steep for the marcher now","Ridgelines that run along the noise grid axes","Shadows that detach from the casting ridge","Snow that appears on the steep cliff faces"]'
+  data-feedback="Noise lives on an axis-aligned lattice; warping the input coordinate bends ridgelines so they meander naturally."></div>
+
+<div class="source">
+  <span class="label">Primary source — read this next</span>
+  <a href="https://iquilezles.org/articles/terrainmarching/">IQ — Terrain marching</a> (the LOD idea) and
+  <a href="https://iquilezles.org/articles/warp/">IQ — Domain warping</a>. The capstone is his
+  <a href="https://www.shadertoy.com/view/MdX3Rr">"Elevated"</a>, mirrored in our
+  <a href="../demo/elevated.html">live demo</a>. See
+  <a href="https://github.com/franpiaggio/interactive-shader-course/blob/main/RESOURCES.md">RESOURCES.md</a>.
+</div>
+
+<div class="ask">
+  <span class="label">You can now build an "Elevated"-grade landscape. 🏔️</span>
+  Compare your result against the <a href="../demo/elevated.html">full demo</a> — it adds the last layer of
+  polish (a richer sky, projected scrolling clouds, and filmic tone mapping). Ask me to walk through any of
+  those, or to add a <strong>lake</strong> (water plane + sky reflection) or <strong>ridged peaks</strong>
+  next.
+</div>
+
+<nav class="lesson-nav">
+  <span>← <a href="a5-erosion-and-derivatives.html">A5</a></span>
+  <span><a href="index.html">Advanced index</a> · <a href="../demo/elevated.html">▶ Live demo</a></span>
+</nav>
+
+</main>
+
+<script type="module" src="../assets/quiz.js"></script>
+<script type="module">
+import { createShaderLab } from '../assets/shader-lab.js';
+
+const SRC = `
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+const mat2 m2=mat2(0.8,-0.6,0.6,0.8);
+vec3 noised(vec2 x){
+  vec2 i=floor(x), f=fract(x);
+  vec2 u=f*f*f*(f*(f*6.0-15.0)+10.0);
+  vec2 du=30.0*f*f*(f*(f-2.0)+1.0);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return vec3(a+(b-a)*u.x+(c-a)*u.y+(a-b-c+d)*u.x*u.y,
+              du*(vec2(b-a,c-a)+(a-b-c+d)*u.yx)); }
+float fbmN(vec2 p, int oct){ float a=0.0,b=1.0; vec2 d=vec2(0.0);
+  for(int i=0;i<12;i++){ if(i>=oct) break; vec3 n=noised(p); d+=n.yz; a+=b*n.x/(1.0+dot(d,d)); b*=0.5; p=m2*p*2.0; } return a; }
+vec2 warp(vec2 x){ vec2 w=vec2(noised(x*0.05).x, noised(x*0.05+vec2(31.4,12.1)).x); return x + uWarp*(w-0.5); }
+float terrainM(vec2 x){ return 9.0*fbmN(warp(x)*0.06, int(uMOct)); }   // march & shadows — cheap
+float terrainH(vec2 x){ return 9.0*fbmN(warp(x)*0.06, 12); }           // normal only — detailed
+float castRay(vec3 ro, vec3 rd){
+  float t=0.5, dt, lastD=ro.y-terrainM(ro.xz);
+  for(int i=0;i<260;i++){ vec3 p=ro+rd*t; float d=p.y-terrainM(p.xz);
+    if(d<0.0) return t-dt+dt*lastD/(lastD-d);
+    lastD=d; dt=0.01*t+0.05; t+=dt; if(t>170.0) break; }
+  return -1.0; }
+vec3 calcNormal(vec3 p, float t){ float e=0.002*t;
+  return normalize(vec3(terrainH(p.xz-vec2(e,0.0))-terrainH(p.xz+vec2(e,0.0)), 2.0*e,
+                        terrainH(p.xz-vec2(0.0,e))-terrainH(p.xz+vec2(0.0,e)))); }
+float shadow(vec3 p, vec3 sun){ float res=1.0, t=0.6;
+  for(int i=0;i<24;i++){ vec3 q=p+sun*t; float h=q.y-terrainM(q.xz);
+    res=min(res, 10.0*h/t); if(h<0.0) return 0.0; t+=clamp(h,0.4,6.0); if(t>50.0) break; }
+  return clamp(res,0.0,1.0); }
+float vig(vec2 fc, vec3 res){ vec2 q=fc/res.xy; return 0.5+0.5*pow(16.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.15); }
+vec3 skyCol(vec3 rd, vec3 sun){
+  vec3 col=mix(vec3(0.30,0.55,0.92), vec3(0.05,0.16,0.42), clamp(rd.y*1.4,0.0,1.0));
+  float sd=clamp(dot(rd,sun),0.0,1.0);
+  col=mix(col, vec3(0.95,0.75,0.55), pow(sd,5.0)*0.5*clamp(1.0-rd.y*2.5,0.0,1.0));
+  col+=vec3(1.0,0.85,0.6)*pow(sd,250.0); return col; }
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  vec2 uv=(fragCoord-0.5*iResolution.xy)/iResolution.y;
+  vec3 sun=normalize(vec3(uSunX,0.42,0.6));
+  vec3 ro=vec3(0.0,13.0,iTime*3.0); vec3 ta=ro+vec3(0.0,-0.9,4.0);
+  vec3 ww=normalize(ta-ro),uu=normalize(cross(ww,vec3(0,1,0))),vv=cross(uu,ww);
+  vec3 rd=normalize(uu*uv.x+vv*uv.y+ww*1.4);
+  float t=castRay(ro,rd); vec3 col;
+  if(t<0.0){ col=skyCol(rd,sun); }
+  else{ vec3 p=ro+rd*t; vec3 n=calcNormal(p,t);
+    float slope=n.y, h01=clamp(terrainM(p.xz)/9.0,0.0,1.0);
+    vec3 grass=vec3(0.16,0.30,0.08), rock=vec3(0.28,0.22,0.17), snow=vec3(0.95,0.96,1.0);
+    vec3 mat=mix(rock,grass,smoothstep(0.55,0.82,slope));
+    mat=mix(mat,snow,smoothstep(0.66,0.86,h01)*smoothstep(0.5,0.78,slope));
+    float dif=clamp(dot(n,sun),0.0,1.0), sh=shadow(p+n*0.2,sun), sky=clamp(0.5+0.5*n.y,0.0,1.0);
+    col=mat*(vec3(1.4,1.15,0.8)*dif*sh + vec3(0.12,0.22,0.40)*sky);
+    vec3 fogCol=mix(vec3(0.5,0.62,0.8), vec3(0.95,0.72,0.5), pow(clamp(dot(rd,sun),0.0,1.0),5.0));
+    col=mix(col, fogCol, 1.0-exp(-0.00045*t*t)); }
+  col*=vig(fragCoord,iResolution); col=pow(col,vec3(0.4545)); fragColor=vec4(col,1.0); }`;
+
+createShaderLab(document.getElementById('lab-play'), {
+  height: 400,
+  uniforms: [
+    { name: 'uMOct', label: 'march detail', min: 3, max: 9, step: 1, value: 6 },
+    { name: 'uWarp', label: 'warp',         min: 0.0, max: 28.0, value: 16.0 },
+    { name: 'uSunX', label: 'sun',          min: -1.0, max: 0.2, value: -0.7 },
+  ],
+  source: SRC,
+});
+
+document.getElementById('code-lod').textContent =
+  '// LOD + domain-warped terrain — paste into shadertoy.com/new. Tweak these:\n' +
+  'const float uMOct=6.0, uWarp=16.0, uSunX=-0.7;\n' + SRC;
+</script>
+</body>
+</html>

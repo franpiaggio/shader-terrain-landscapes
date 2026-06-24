@@ -31,7 +31,8 @@
   <h1>Terrain &amp; Landscapes</h1>
   <p class="standfirst">You can raymarch a sphere — now raymarch a <em>world</em>. This track builds an
   Iñigo-Quílez-style landscape renderer step by step: heightfield marching, noise terrain, slope/height
-  materials, fog and sun. By the end you have a flythrough vista you can post.</p>
+  materials, fog and sun. By the end you have a flythrough vista you can post — then push it to
+  "Elevated" grade with noise-derivative erosion and level-of-detail performance.</p>
 </header>
 
 <main>
@@ -84,6 +85,22 @@
     <h3>Variants &amp; moods</h3>
     <p>The same renderer as a fiery sunset and a sun-baked desert — the few knobs that carry a mood.</p>
     <span class="win">win · sunset + desert, your own looks</span>
+  </a>
+</div>
+
+<div class="group-label">Going pro — toward "Elevated"</div>
+<div class="cards">
+  <a class="card" href="a5-erosion-and-derivatives.html">
+    <span class="n">A5</span>
+    <h3>Noise derivatives &amp; erosion</h3>
+    <p>Trade bubbly fBM for eroded ridges and scooped valleys, using noise that knows its own slope.</p>
+    <span class="win">win · real mountains, not lumps</span>
+  </a>
+  <a class="card" href="a6-detail-and-performance.html">
+    <span class="n">A6</span>
+    <h3>Detail &amp; performance</h3>
+    <p>Level-of-detail terrain (cheap march, detailed normal) + domain warping — sharper <em>and</em> faster.</p>
+    <span class="win">win · "Elevated"-grade, real-time</span>
   </a>
 </div>
 
