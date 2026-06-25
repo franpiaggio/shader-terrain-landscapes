@@ -184,8 +184,10 @@ const P = [
 const clone = o => ({sunDir:o.sunDir.slice(), sunCol:o.sunCol.slice(), sky1:o.sky1.slice(), sky2:o.sky2.slice(),
   fogC:o.fogC.slice(), exp:o.exp, snow:o.snow, H:o.H, seed:(o.seed||[0,0]).slice()});
 let cur = clone(P[0]), tgt = clone(P[0]), last = P[0];
+// one random terrain per page load, then KEEP it fixed so Randomize never moves the camera
+cur.seed = tgt.seed = [(Math.random()*2-1)*900, (Math.random()*2-1)*900];
 function randomize(){ let q; do { q = P[Math.random()*P.length|0]; } while (q===last && P.length>1); last=q;
-  tgt = clone(q); tgt.seed = [(Math.random()*2-1)*900, (Math.random()*2-1)*900]; }
+  tgt = clone(q); tgt.seed = cur.seed.slice(); tgt.H = cur.H; }   // only the mood transitions; terrain stays put
 document.getElementById('rnd').onclick = randomize;
 
 let tmx=0.5, tmy=0.42, mx=0.5, my=0.42;
